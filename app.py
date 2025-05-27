@@ -45,6 +45,7 @@ matches_df = pd.DataFrame(matches)
 
 # --- Setup Dash App ---
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
+server = app.server 
 
 industries = sorted(df['Industry'].dropna().unique())
 materials = sorted({m for lst in df['resource_list'].tolist() + df['byproduct_list'].tolist() for m in lst})
