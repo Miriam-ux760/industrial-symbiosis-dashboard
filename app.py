@@ -253,9 +253,8 @@ def update_dashboard(selected_industries, selected_materials, max_distance):
 
     return fig, filtered_matches, metrics_panel, mci_card, heatmap_fig, matrix_table_data, matrix_table_columns
 
-if __name__ == '__main__':
-    app.run(debug=True)
+
 
 if __name__ == '__main__':
-    app.run_server(debug=True)
+   app.run(debug=True)
 
