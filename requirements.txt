@@ -6,4 +6,5 @@ geopy
 networkx
 openpyxl
 gunicorn
+matplotlib
 
