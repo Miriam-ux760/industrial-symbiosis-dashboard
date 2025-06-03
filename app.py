@@ -6,15 +6,16 @@ from geopy.distance import geodesic
 import dash
 from dash import dcc, html, Input, Output, State, dash_table
 import plotly.graph_objs as go
+import plotly.express as px
 import io
 import base64
-import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt 
 import dash_bootstrap_components as dbc
 from collections import Counter, defaultdict
 import numpy as np
 
-# --- Load and clean data ---
-df = pd.read_excel("Industrial_symbiosis_data.rEV 4.xlsx", sheet_name="industrial_symbiosis_data")
+# --- Load and clean data ---C:
+df = pd.read_excel("industrial_symbiosis_data.rEV 4 new.Mimi.Kef.xlsx", sheet_name="industrial_symbiosis_data.rEV 4 new.Mimi.Kef.xlsx")
 df = df.dropna(subset=['Company Name', 'Resource Needs', 'By-Products ', 'Latitude', 'Longitude'])
 df['resource_list'] = df['Resource Needs'].str.lower().str.split('|').apply(lambda lst: [x.strip() for x in lst])
 df['byproduct_list'] = df['By-Products '].str.lower().str.split('|').apply(lambda lst: [x.strip() for x in lst])
@@ -45,7 +46,7 @@ matches_df = pd.DataFrame(matches)
 
 # --- Setup Dash App ---
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
-server = app.server 
+server = app.server
 
 industries = sorted(df['Industry'].dropna().unique())
 materials = sorted({m for lst in df['resource_list'].tolist() + df['byproduct_list'].tolist() for m in lst})
@@ -82,10 +83,15 @@ def compute_mci(matches, df):
 
 def generate_flow_matrix(matches):
     matrix = defaultdict(lambda: defaultdict(int))
+    material_map = defaultdict(lambda: defaultdict(set))
+
     for m in matches:
         matrix[m['From Industry']][m['To Industry']] += 1
+        material_map[m['From Industry']][m['To Industry']].update(m['Matched Items'].split(', '))
+
     df_matrix = pd.DataFrame(matrix).fillna(0).astype(int).T
-    return df_matrix
+    df_materials = pd.DataFrame({k: {kk: ', '.join(vv) for kk, vv in v.items()} for k, v in material_map.items()}).T
+    return df_matrix, df_materials
 
 app.layout = html.Div([
     html.H1("Industrial Symbiosis Dashboard"),
@@ -113,7 +119,8 @@ app.layout = html.Div([
         dbc.Col(html.Div([
             html.Div(id="metrics-panel"),
             html.Div(id="mci-panel"),
-            dcc.Graph(id="network-graph")
+            dcc.Graph(id="network-graph"),
+            dcc.Graph(id="map-graph")
         ]), width=9)
     ]),
 
@@ -137,7 +144,6 @@ app.layout = html.Div([
     ], style={"padding": 20})
 ])
 
-# --- Callbacks ---
 @app.callback(
     [
         Output("network-graph", "figure"),
@@ -146,7 +152,8 @@ app.layout = html.Div([
         Output("mci-panel", "children"),
         Output("industry-heatmap", "figure"),
         Output("industry-matrix-table", "data"),
-        Output("industry-matrix-table", "columns")
+        Output("industry-matrix-table", "columns"),
+        Output("map-graph", "figure")
     ],
     [
         Input("industry-filter", "value"),
@@ -164,7 +171,6 @@ def update_dashboard(selected_industries, selected_materials, max_distance):
     if selected_materials:
         filtered_matches = [m for m in filtered_matches if any(mat in m['Matched Items'] for mat in selected_materials)]
 
-    # --- Metrics ---
     total_matches, total_companies, avg_distance, top_companies = compute_metrics(filtered_matches)
     top_company_list = html.Ul([html.Li(f"{name}: {count} connections") for name, count in top_companies])
 
@@ -178,7 +184,6 @@ def update_dashboard(selected_industries, selected_materials, max_distance):
     ])
     metrics_panel = dbc.Card(metrics, style={"marginBottom": "20px"})
 
-    # --- MCI Panel ---
     mci_value = compute_mci(filtered_matches, filtered_df)
     mci_card = dbc.Card([
         dbc.CardBody([
@@ -204,13 +209,14 @@ def update_dashboard(selected_industries, selected_materials, max_distance):
         ])
     ], style={"marginBottom": "20px"})
 
-    # --- Graph ---
-    G = nx.DiGraph()
+    G = new_func()
     for match in filtered_matches:
         G.add_edge(match['From'], match['To'], label=match['Matched Items'], distance=match['Distance (km)'])
 
     pos = nx.spring_layout(G, seed=42)
     edge_trace = []
+    arrow_shapes = []
+
     for u, v, d in G.edges(data=True):
         x0, y0 = pos[u]
         x1, y1 = pos[v]
@@ -219,15 +225,54 @@ def update_dashboard(selected_industries, selected_materials, max_distance):
             line=dict(width=1, color='gray'),
             hoverinfo='text',
             text=f"{u} → {v}<br>Items: {d['label']}<br>Distance: {d['distance']} km",
-            mode='lines'))
+            mode='lines'
+        ))
+
+        dx = x1 - x0
+        dy = y1 - y0
+        length = (dx**2 + dy**2) ** 0.5
+        if length == 0:
+            continue
+        arrow_head_size = 0.05
+        arrow_x = x1 - arrow_head_size * dx / length
+        arrow_y = y1 - arrow_head_size * dy / length
+
+        arrow_shapes.append({
+            'type': 'line',
+            'x0': x0,
+            'y0': y0,
+            'x1': arrow_x,
+            'y1': arrow_y,
+            'line': {
+                'color': 'blue',
+                'width': 2,
+                'dash': 'solid',
+            },
+            'xref': 'x',
+            'yref': 'y',
+            'ax': x0,
+            'ay': y0,
+            'arrowhead': 2,
+            'arrowsize': 1,
+            'arrowwidth': 1,
+            'arrowcolor': 'blue'
+        })
+
+    color_palette = px.colors.qualitative.Safe + px.colors.qualitative.Vivid + px.colors.qualitative.Bold
+    company_list = list(G.nodes)
+    color_map = {company: color_palette[i % len(color_palette)] for i, company in enumerate(company_list)}
 
     node_trace = go.Scatter(
-        x=[pos[node][0] for node in G.nodes()],
-        y=[pos[node][1] for node in G.nodes()],
-        text=[node for node in G.nodes()],
+        x=[pos[node][0] for node in company_list],
+        y=[pos[node][1] for node in company_list],
+        text=company_list,
         mode='markers+text',
         textposition="top center",
-        marker=dict(size=10, color='blue'),
+        marker=dict(
+            size=12,
+            color=[color_map[node] for node in company_list],
+            line=dict(width=1, color='black')
+        ),
         hoverinfo='text'
     )
 
@@ -236,25 +281,53 @@ def update_dashboard(selected_industries, selected_materials, max_distance):
                         showlegend=False,
                         hovermode='closest',
                         margin=dict(b=20, l=5, r=5, t=40),
-                        title="Material Flow Network"
+                        title="Material Flow Network (with Arrows)",
+                        shapes=arrow_shapes
                     ))
 
-    # --- Industry Flow Matrix ---
-    matrix_df = generate_flow_matrix(filtered_matches)
+    matrix_df, matrix_materials = generate_flow_matrix(filtered_matches)
     heatmap_fig = go.Figure(data=go.Heatmap(
         z=matrix_df.values,
         x=matrix_df.columns,
         y=matrix_df.index,
+        text=matrix_materials.values,
+        hoverinfo="text",
         colorscale='Viridis'))
     heatmap_fig.update_layout(title="Industry-to-Industry Material Flow", xaxis_title="To Industry", yaxis_title="From Industry")
 
     matrix_table_data = matrix_df.reset_index().to_dict('records')
     matrix_table_columns = [{"name": i, "id": i} for i in matrix_df.reset_index().columns]
 
-    return fig, filtered_matches, metrics_panel, mci_card, heatmap_fig, matrix_table_data, matrix_table_columns
+    map_data = []
+    for match in filtered_matches:
+        from_row = df[df["Company Name"] == match["From"]].iloc[0]
+        to_row = df[df["Company Name"] == match["To"]].iloc[0]
 
+        map_data.append(dict(
+            type="scattermapbox",
+            mode="markers+lines",
+            lat=[from_row["Latitude"], to_row["Latitude"]],
+            lon=[from_row["Longitude"], to_row["Longitude"]],
+            marker={"size": 10},
+            text=[f"From: {match['From']}<br>Material: {match['Matched Items']}", 
+                  f"To: {match['To']}"],
+            line={"width": 2, "color": "blue"}
+        ))
 
+    map_fig = go.Figure(map_data)
+    map_fig.update_layout(
+        mapbox_style="open-street-map",
+        mapbox_zoom=6,
+        mapbox_center={"lat": df["Latitude"].mean(), "lon": df["Longitude"].mean()},
+        height=600,
+        title="Geographic Material Flow Map"
+    )
+
+    return fig, filtered_matches, metrics_panel, mci_card, heatmap_fig, matrix_table_data, matrix_table_columns, map_fig
+
+def new_func():
+    G = nx.DiGraph()
+    return G
 
 if __name__ == '__main__':
-   app.run(debug=True)
-
+    app.run(debug=True)
