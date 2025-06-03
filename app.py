@@ -9,13 +9,13 @@ import plotly.graph_objs as go
 import plotly.express as px
 import io
 import base64
-import matplotlib.pyplot as plt 
+import matplotlib.pyplot as plt
 import dash_bootstrap_components as dbc
 from collections import Counter, defaultdict
 import numpy as np
 
-# --- Load and clean data ---C:
-df = pd.read_excel("industrial_symbiosis_data.rEV 4 new.Mimi.Kef.xlsx", sheet_name="industrial_symbiosis_data.rEV 4 new.Mimi.Kef.xlsx")
+# --- Load and clean data ---
+df = pd.read_excel("Industrial_symbiosis_data.rEV.xlsx", sheet_name="industrial_symbiosis_data")
 df = df.dropna(subset=['Company Name', 'Resource Needs', 'By-Products ', 'Latitude', 'Longitude'])
 df['resource_list'] = df['Resource Needs'].str.lower().str.split('|').apply(lambda lst: [x.strip() for x in lst])
 df['byproduct_list'] = df['By-Products '].str.lower().str.split('|').apply(lambda lst: [x.strip() for x in lst])
@@ -209,7 +209,7 @@ def update_dashboard(selected_industries, selected_materials, max_distance):
         ])
     ], style={"marginBottom": "20px"})
 
-    G = new_func()
+    G = nx.DiGraph()
     for match in filtered_matches:
         G.add_edge(match['From'], match['To'], label=match['Matched Items'], distance=match['Distance (km)'])
 
@@ -324,10 +324,6 @@ def update_dashboard(selected_industries, selected_materials, max_distance):
     )
 
     return fig, filtered_matches, metrics_panel, mci_card, heatmap_fig, matrix_table_data, matrix_table_columns, map_fig
-
-def new_func():
-    G = nx.DiGraph()
-    return G
 
 if __name__ == '__main__':
     app.run(debug=True)
