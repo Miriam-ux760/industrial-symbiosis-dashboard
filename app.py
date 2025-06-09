@@ -306,3 +306,5 @@ def update_dashboard(selected_industries, selected_materials, max_distance):
 
 if __name__ == '__main__':
     app.run(debug=True)
+
+    
