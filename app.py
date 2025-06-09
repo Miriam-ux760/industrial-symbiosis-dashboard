@@ -15,7 +15,7 @@ from collections import Counter, defaultdict
 import numpy as np
 
 # --- Load and clean data ---
-df = pd.read_excel("Industrial_symbiosis_data.rEV.xlsx", sheet_name="industrial_symbiosis_data")
+df = pd.read_excel("industrial_symbiosis_data.rEV.xlsx", sheet_name="industrial_symbiosis_data")
 df = df.dropna(subset=['Company Name', 'Resource Needs', 'By-Products ', 'Latitude', 'Longitude'])
 df['resource_list'] = df['Resource Needs'].str.lower().str.split('|').apply(lambda lst: [x.strip() for x in lst])
 df['byproduct_list'] = df['By-Products '].str.lower().str.split('|').apply(lambda lst: [x.strip() for x in lst])
